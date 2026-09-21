@@ -1,22 +1,22 @@
 # Python
-__pycache__/          # compiled Python files, created automatically when code runs
-*.py[cod]             # same: .pyc, .pyo, .pyd files
-*.egg-info/           # created by `pip install -e .`
-.venv/                # your virtual environment: large, and specific to your machine
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
 venv/
-build/                # created when building a package
+build/
 dist/
 
 # Tools
-.pytest_cache/        # pytest's cache
-.mypy_cache/          # mypy's cache
-.ruff_cache/          # ruff's cache
-.coverage             # test coverage data
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
 htmlcov/
 
 # Secrets: never commit API keys
-.env                  # your real API key lives here
-*.key                 # private key files
+.env
+*.key
 
 # Data: commit the fetch script and checksum, not the dataset
 data/*.parquet
@@ -27,14 +27,6 @@ data/raw/
 eval/results/*/traces/
 
 # OS / editor
-.DS_Store             # macOS folder metadata
-.idea/                # PyCharm settings
-.vscode/              # VS Code settings
-
-.ipynb_checkpoints/
-
-# Log files
-*.log
-
-.env/
-env/
+.DS_Store
+.idea/
+.vscode/

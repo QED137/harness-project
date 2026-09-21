@@ -1,4 +1,4 @@
-# harness-proejct
+# tsagent
 
 An LLM agent that answers quantitative questions about a weather time series by writing Python and running it in a locked-down Docker sandbox, plus an evaluation harness that measures how often it is actually right.
 
@@ -15,6 +15,7 @@ The evaluation is the point of the project. Every question has a ground-truth an
 - [Evaluation](#evaluation)
 - [Quick start](#quick-start)
 - [Testing](#testing)
+- [Development](#development)
 - [Repository layout](#repository-layout)
 - [Known limitations](#known-limitations)
 - [Roadmap](#roadmap)
@@ -118,12 +119,14 @@ Policy violations ("the model tried to import `requests`") and resource limits (
 from pathlib import Path
 from tsagent.sandbox import DockerSandbox, SandboxConfig
 
-sandbox = DockerSandbox(SandboxConfig(
-    data_dir=Path("data"),
-    preload="/data/weather.parquet",   # available to agent code as `df`
-    timeout_s=10,
-    memory_mb=512,
-))
+sandbox = DockerSandbox(
+    SandboxConfig(
+        data_dir=Path("data"),
+        preload="/data/weather.parquet",  # available to agent code as `df`
+        timeout_s=10,
+        memory_mb=512,
+    )
+)
 
 r = sandbox.run("result = df['temperature'].resample('MS').mean().max()")
 print(r.status, r.result, r.total_s)
@@ -217,6 +220,34 @@ One test deliberately swallows the in-process timeout with `except BaseException
 
 ---
 
+## Development
+
+One-time setup:
+
+```bash
+pip install -e ".[dev]" pre-commit mypy pip-audit
+pre-commit install          # checks now run on every git commit
+cp .env.example .env        # add your API key; .env is git-ignored
+```
+
+Checks before pushing (CI runs the same on every push):
+
+| Check | Command | Catches |
+|---|---|---|
+| Tests | `pytest` | broken behaviour |
+| Lint + security lint | `ruff check .` | bugs, insecure patterns (`S` rules) |
+| Formatting | `ruff format --check .` | inconsistent style |
+| Types | `mypy src` | type errors, e.g. unchecked `None` |
+| Secrets | `pre-commit run gitleaks --all-files` | API keys, tokens, private keys |
+| Dependencies | `pip-audit -r docker/sandbox/requirements.txt` | packages with known vulnerabilities |
+| Everything above except tests | `pre-commit run --all-files` | |
+
+CI (`.github/workflows/ci.yml`) additionally scans the full git history for secrets, builds the sandbox image, runs the Docker isolation tests, and scans the image for known CVEs with Trivy.
+
+If a secret is ever committed, **revoke it at the provider immediately**. Deleting the commit is not enough: it stays in git history and in any clone or fork.
+
+---
+
 ## Repository layout
 
 ```
@@ -273,6 +304,7 @@ These are stated deliberately rather than left for a reader to discover.
   - 34 tests for policy, runner and result classification (passing, no Docker needed)
   - 15 container isolation tests that disable the Python-level layers and check the container alone holds (written; to be run on a Docker host)
 - **Threat model** (`docs/threat_model.md`), including accepted risks and known bypasses
+- **Quality and security checks**: ruff (including security rules), mypy, pre-commit hooks, gitleaks secret scanning, pip-audit, and a GitHub Actions pipeline that also runs the Docker isolation tests and a Trivy image scan
 
 ### Next steps
 
