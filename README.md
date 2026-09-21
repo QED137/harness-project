@@ -1,4 +1,4 @@
-# tsagent
+# harness - project
 
 An LLM agent that answers quantitative questions about a weather time series by writing Python and running it in a locked-down Docker sandbox, plus an evaluation harness that measures how often it is actually right.
 
@@ -10,15 +10,30 @@ The evaluation is the point of the project. Every question has a ground-truth an
 
 ## Contents
 
-- [How it works](#how-it-works)
-- [The sandbox](#the-sandbox)
-- [Evaluation](#evaluation)
-- [Quick start](#quick-start)
-- [Testing](#testing)
-- [Development](#development)
-- [Repository layout](#repository-layout)
-- [Known limitations](#known-limitations)
-- [Roadmap](#roadmap)
+- [harness - project](#harness---project)
+  - [Contents](#contents)
+  - [How it works](#how-it-works)
+  - [The sandbox](#the-sandbox)
+    - [Design principle](#design-principle)
+    - [Layers](#layers)
+    - [Container configuration](#container-configuration)
+    - [Result protocol](#result-protocol)
+    - [Usage](#usage)
+  - [Evaluation](#evaluation)
+    - [Setup](#setup)
+    - [Metrics](#metrics)
+    - [Results](#results)
+    - [Failure analysis](#failure-analysis)
+  - [Quick start](#quick-start)
+  - [Testing](#testing)
+  - [Development](#development)
+  - [Repository layout](#repository-layout)
+  - [Known limitations](#known-limitations)
+  - [Roadmap](#roadmap)
+    - [Achieved so far](#achieved-so-far)
+    - [Next steps](#next-steps)
+    - [Possible extensions (after the core is done)](#possible-extensions-after-the-core-is-done)
+  - [License](#license)
 
 ---
 
