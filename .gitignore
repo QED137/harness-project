@@ -30,3 +30,4 @@ eval/results/*/traces/
 .DS_Store
 .idea/
 .vscode/
+.history/
