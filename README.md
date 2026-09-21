@@ -1,4 +1,4 @@
-# harness - project
+# tsagent
 
 An LLM agent that answers quantitative questions about a weather time series by writing Python and running it in a locked-down Docker sandbox, plus an evaluation harness that measures how often it is actually right.
 
@@ -10,30 +10,15 @@ The evaluation is the point of the project. Every question has a ground-truth an
 
 ## Contents
 
-- [harness - project](#harness---project)
-  - [Contents](#contents)
-  - [How it works](#how-it-works)
-  - [The sandbox](#the-sandbox)
-    - [Design principle](#design-principle)
-    - [Layers](#layers)
-    - [Container configuration](#container-configuration)
-    - [Result protocol](#result-protocol)
-    - [Usage](#usage)
-  - [Evaluation](#evaluation)
-    - [Setup](#setup)
-    - [Metrics](#metrics)
-    - [Results](#results)
-    - [Failure analysis](#failure-analysis)
-  - [Quick start](#quick-start)
-  - [Testing](#testing)
-  - [Development](#development)
-  - [Repository layout](#repository-layout)
-  - [Known limitations](#known-limitations)
-  - [Roadmap](#roadmap)
-    - [Achieved so far](#achieved-so-far)
-    - [Next steps](#next-steps)
-    - [Possible extensions (after the core is done)](#possible-extensions-after-the-core-is-done)
-  - [License](#license)
+- [How it works](#how-it-works)
+- [The sandbox](#the-sandbox)
+- [Evaluation](#evaluation)
+- [Quick start](#quick-start)
+- [Testing](#testing)
+- [Development](#development)
+- [Repository layout](#repository-layout)
+- [Known limitations](#known-limitations)
+- [Roadmap](#roadmap)
 
 ---
 
@@ -147,6 +132,8 @@ r = sandbox.run("result = df['temperature'].resample('MS').mean().max()")
 print(r.status, r.result, r.total_s)
 ```
 
+**Data permissions.** The container runs as UID 65534, not as you, so the data directory must be readable by others (`chmod o+rx data && chmod o+r data/*.parquet`). `DockerSandbox` checks this at construction and tells you the exact command if it fails.
+
 The full threat model, including accepted risks, is in [`docs/threat_model.md`](docs/threat_model.md).
 
 ---
@@ -219,6 +206,7 @@ pytest -m "not slow"   # skip memory-exhaustion and hard-kill tests
 | `tests/test_policy.py` | no | static check accepts normal analysis code, rejects known patterns, documents a known bypass |
 | `tests/test_runner.py` | no | runner protocol, import guard, soft timeout, NaN flags, tracebacks, output capture |
 | `tests/test_classify.py` | no | host-side classification of results, timeouts, OOM and crashes |
+| `tests/test_data_dir_check.py` | no | data directory and preload file permission checks |
 | `tests/test_sandbox.py` | yes | container isolation |
 
 Most tests in `test_sandbox.py` **disable both Python-level policy layers** to simulate code that has already bypassed them, then check that the container alone blocks:
@@ -232,6 +220,15 @@ Most tests in `test_sandbox.py` **disable both Python-level policy layers** to s
 - output floods written directly to the file descriptor
 
 One test deliberately swallows the in-process timeout with `except BaseException:` to check that the host-side hard kill still ends the run.
+
+### Bugs found by the isolation tests
+
+The first run of the container tests on a real Docker host found two bugs that the Docker-free tests could not:
+
+1. **Data not readable inside the container.** The container runs as UID 65534 (`nobody`), not as the host user. A data directory with owner-only permissions (`0700`, which pytest uses for temp dirs) made the preload fail with a bare `PermissionError` deep inside the container. Fix: `DockerSandbox` now checks up front that the mounted directory and preload file are readable by "others" and raises a `ValueError` with the exact `chmod` command. Regression tests: `tests/test_data_dir_check.py`.
+2. **Result line lost after unterminated output.** Agent code writing to the file descriptor without a trailing newline glued its output to the front of the runner's result line, and the parser only looked for the marker at line starts, so a successful run was reported as `runner_crash`. Fix: the runner always starts the result on a new line, and the host searches for the last marker anywhere in the output. Regression test: `tests/test_classify.py`.
+
+Both are the kind of bug that only appears against the real system, which is why the container tests exist.
 
 ---
 
@@ -316,8 +313,8 @@ These are stated deliberately rather than left for a reader to discover.
   - Structured `SandboxResult` separating policy violations from resource limits
 - **Static policy check and runtime import guard**, used for model feedback and metrics
 - **Test suite**
-  - 34 tests for policy, runner and result classification (passing, no Docker needed)
-  - 15 container isolation tests that disable the Python-level layers and check the container alone holds (written; to be run on a Docker host)
+  - 41 tests for policy, runner, result classification and configuration checks (no Docker needed)
+  - 15 container isolation tests that disable the Python-level layers and check the container alone holds. First run on Linux: 13 passed, 2 failed and exposed real bugs (see [Bugs found by the isolation tests](#bugs-found-by-the-isolation-tests)); both fixed with regression tests
 - **Threat model** (`docs/threat_model.md`), including accepted risks and known bypasses
 - **Quality and security checks**: ruff (including security rules), mypy, pre-commit hooks, gitleaks secret scanning, pip-audit, and a GitHub Actions pipeline that also runs the Docker isolation tests and a Trivy image scan
 
@@ -341,4 +338,4 @@ These are stated deliberately rather than left for a reader to discover.
 
 ## License
 
-MIT
+MIT (to be added).

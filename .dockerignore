@@ -1,0 +1,40 @@
+# Git and local tooling
+.git/
+.gitignore
+.gitattributes
+.github/
+.history/
+.vscode/
+.idea/
+
+# Python environments, caches, and build output
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.key
+
+# Local data and evaluation output
+data/
+eval/results/
+reports/
+results/
+
+# Documentation and repository-only files
+docs/
+README.md
+.pre-commit-config.yaml

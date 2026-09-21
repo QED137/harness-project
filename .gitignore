@@ -30,4 +30,6 @@ eval/results/*/traces/
 .DS_Store
 .idea/
 .vscode/
+
+# VS Code Local History extension
 .history/
