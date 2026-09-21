@@ -10,15 +10,31 @@ The evaluation is the point of the project. Every question has a ground-truth an
 
 ## Contents
 
-- [How it works](#how-it-works)
-- [The sandbox](#the-sandbox)
-- [Evaluation](#evaluation)
-- [Quick start](#quick-start)
-- [Testing](#testing)
-- [Development](#development)
-- [Repository layout](#repository-layout)
-- [Known limitations](#known-limitations)
-- [Roadmap](#roadmap)
+- [tsagent](#tsagent)
+  - [Contents](#contents)
+  - [How it works](#how-it-works)
+  - [The sandbox](#the-sandbox)
+    - [Design principle](#design-principle)
+    - [Layers](#layers)
+    - [Container configuration](#container-configuration)
+    - [Result protocol](#result-protocol)
+    - [Usage](#usage)
+  - [Evaluation](#evaluation)
+    - [Setup](#setup)
+    - [Metrics](#metrics)
+    - [Results](#results)
+    - [Failure analysis](#failure-analysis)
+  - [Quick start](#quick-start)
+  - [Testing](#testing)
+    - [Bugs found by the isolation tests](#bugs-found-by-the-isolation-tests)
+  - [Development](#development)
+  - [Repository layout](#repository-layout)
+  - [Known limitations](#known-limitations)
+  - [Roadmap](#roadmap)
+    - [Achieved so far](#achieved-so-far)
+    - [Next steps](#next-steps)
+    - [Possible extensions (after the core is done)](#possible-extensions-after-the-core-is-done)
+  - [License](#license)
 
 ---
 
@@ -263,27 +279,42 @@ If a secret is ever committed, **revoke it at the provider immediately**. Deleti
 ## Repository layout
 
 ```
-tsagent/
-├── docker/sandbox/
-│   ├── Dockerfile              pinned pandas/numpy/pyarrow, pip removed, runs as nobody
-│   └── runner.py               in-container executor
-├── src/tsagent/
-│   ├── sandbox/
-│   │   ├── models.py           SandboxConfig, SandboxResult, status and violation enums
-│   │   ├── policy.py           static AST check
-│   │   └── docker_sandbox.py   container lifecycle, hard kill, OOM detection, output cap
-│   ├── schemas.py              (planned) plan, step, tool argument and answer models
-│   ├── tools.py                (planned) describe_dataset, run_python, submit_answer
-│   ├── llm.py                  (planned) client wrapper with token and latency accounting
-│   ├── planner.py              (planned)
-│   ├── verifier.py             (planned)
-│   └── agent.py                (planned) orchestration
-├── data/                       (planned) fetch script, frozen dataset, checksum
-├── eval/                       (planned) questions, ground truth, runner, metrics, results
-├── docs/
-│   ├── threat_model.md
-│   └── failures.md             (planned)
-└── tests/
+├── docker
+│   └── sandbox
+│       ├── Dockerfile
+│       ├── requirements.txt
+│       └── runner.py
+├── docs
+│   └── threat_model.md
+├── pyproject.toml
+├── README.md
+├── src
+│   └── tsagent
+│       ├── __init__.py
+│       ├── __pycache__
+│       │   └── __init__.cpython-312.pyc
+│       └── sandbox
+│           ├── docker_sandbox.py
+│           ├── __init__.py
+│           ├── models.py
+│           ├── policy.py
+│           └── __pycache__
+│               ├── docker_sandbox.cpython-312.pyc
+│               ├── __init__.cpython-312.pyc
+│               ├── models.cpython-312.pyc
+│               └── policy.cpython-312.pyc
+└── tests
+    ├── __pycache__
+    │   ├── test_classify.cpython-312-pytest-9.1.1.pyc
+    │   ├── test_data_dir_check.cpython-312-pytest-9.1.1.pyc
+    │   ├── test_policy.cpython-312-pytest-9.1.1.pyc
+    │   ├── test_runner.cpython-312-pytest-9.1.1.pyc
+    │   └── test_sandbox.cpython-312-pytest-9.1.1.pyc
+    ├── test_classify.py
+    ├── test_data_dir_check.py
+    ├── test_policy.py
+    ├── test_runner.py
+    └── test_sandbox.py
 ```
 
 ---
@@ -338,4 +369,4 @@ These are stated deliberately rather than left for a reader to discover.
 
 ## License
 
-MIT (to be added).
+MIT 
