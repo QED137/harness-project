@@ -339,13 +339,14 @@ These are stated deliberately rather than left for a reader to discover.
 
 ### Next steps
 
-1. **Tools**: Pydantic argument schemas for `describe_dataset`, `run_python` and `submit_answer`, used both as the LLM function definition and as validation, with validation failures counted
-2. **Planner**: one LLM call returning ordered steps as a validated Pydantic model
-3. **Verifier**: type, plausible range, unit and NaN checks before an answer is returned
-4. **Dataset**: download script, frozen copy and SHA-256 checksum
-5. **Question set**: about 50 questions with pandas ground truth, tolerances and units
-6. **Evaluation harness**: 10 runs per question, JSONL traces, pass@1, pass@k, consistency, validation failure rate, sandbox events, latency and token cost
-7. **First results and failure analysis** (`docs/failures.md`)
+1. **Dataset**: download one public weather dataset, save a frozen parquet copy with a SHA-256 checksum, and check the sandbox can load it as `df`
+2. **Tools**: Pydantic argument schemas for `describe_dataset`, `run_python` and `submit_answer`, used both as the LLM function definition and as validation, with validation failures counted
+3. **Agent loop**: send the question, execute tool calls, return results, stop at `submit_answer`; record tokens and time per call. First end-to-end answer
+4. **Planner**: one LLM call returning ordered steps as a validated Pydantic model; invalid plans are counted, not silently fixed
+5. **Verifier**: type, plausible range, unit and NaN checks before an answer is returned
+6. **Question set**: about 50 questions with pandas ground truth, tolerances and units
+7. **Evaluation harness**: 10 runs per question, JSONL traces, pass@1, pass@k, consistency, validation failure rate, sandbox events, latency and token cost
+8. **Results and honest documentation**: real numbers in this README and categorized failures in `docs/failures.md`
 
 ### Possible extensions (after the core is done)
 
