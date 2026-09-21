@@ -291,25 +291,13 @@ If a secret is ever committed, **revoke it at the provider immediately**. Deleti
 ├── src
 │   └── tsagent
 │       ├── __init__.py
-│       ├── __pycache__
-│       │   └── __init__.cpython-312.pyc
 │       └── sandbox
 │           ├── docker_sandbox.py
 │           ├── __init__.py
 │           ├── models.py
-│           ├── policy.py
-│           └── __pycache__
-│               ├── docker_sandbox.cpython-312.pyc
-│               ├── __init__.cpython-312.pyc
-│               ├── models.cpython-312.pyc
-│               └── policy.cpython-312.pyc
+│           ├── policy.py              
+│               
 └── tests
-    ├── __pycache__
-    │   ├── test_classify.cpython-312-pytest-9.1.1.pyc
-    │   ├── test_data_dir_check.cpython-312-pytest-9.1.1.pyc
-    │   ├── test_policy.cpython-312-pytest-9.1.1.pyc
-    │   ├── test_runner.cpython-312-pytest-9.1.1.pyc
-    │   └── test_sandbox.cpython-312-pytest-9.1.1.pyc
     ├── test_classify.py
     ├── test_data_dir_check.py
     ├── test_policy.py
