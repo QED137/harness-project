@@ -1,5 +1,0 @@
-# The only libraries agent code can use. Exact pins: they are part of the
-# experimental conditions of every eval run. Audited in CI with pip-audit.
-pandas==2.2.3
-numpy==2.1.3
-pyarrow==25.0.1
