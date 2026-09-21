@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets: never commit API keys
+.env
+*.key
+
+# Data: commit the fetch script and checksum, not the dataset
+data/*.parquet
+data/*.csv
+data/raw/
+
+# Eval: large raw traces stay local; commit summarized results
+eval/results/*/traces/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
