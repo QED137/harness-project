@@ -1,0 +1,27 @@
+# Runs automatically on every `git commit` after: pre-commit install
+# Run on everything manually:                    pre-commit run --all-files
+# Update hook versions:                           pre-commit autoupdate
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files     # stops datasets / model files from being committed
+        args: ["--maxkb=1000"]
+      - id: detect-private-key          # SSH / TLS private keys
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/gitleaks/gitleaks   # API keys, tokens, passwords
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
