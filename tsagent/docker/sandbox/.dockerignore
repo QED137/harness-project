@@ -1,0 +1,5 @@
+# Only runner.py is needed in the image. Everything else stays out of the build context,
+# so secrets or large files next to the Dockerfile can never end up in an image layer.
+*
+!runner.py
+!requirements.txt
