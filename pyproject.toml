@@ -5,10 +5,12 @@ description = "An agent that answers quantitative questions about weather time s
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.7",
+    "pandas>=2.2",
+    "pyarrow>=23.0.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pandas", "pyarrow"]
+dev = ["pytest>=8", "pandas-stubs"]
 
 [build-system]
 requires = ["hatchling"]

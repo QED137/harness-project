@@ -1,0 +1,40 @@
+{
+  "source": "Open-Meteo Historical Weather API (reanalysis)",
+  "attribution": "Weather data by Open-Meteo.com (https://open-meteo.com/), CC BY 4.0",
+  "api_url": "https://archive-api.open-meteo.com/v1/archive",
+  "request": {
+    "latitude": 48.52,
+    "longitude": 9.06,
+    "start_date": "2020-01-01",
+    "end_date": "2024-12-31"
+  },
+  "downloaded_at_utc": "2026-09-22T10:05:34+00:00",
+  "grid_cell": {
+    "latitude": 48.541298,
+    "longitude": 9.090909,
+    "elevation": 368.0
+  },
+  "timezone": "UTC",
+  "variables": {
+    "temperature_2m": "\u00b0C",
+    "relative_humidity_2m": "%",
+    "precipitation": "mm",
+    "wind_speed_10m": "km/h",
+    "surface_pressure": "hPa"
+  },
+  "time_range": [
+    "2020-01-01T00:00:00+00:00",
+    "2024-12-31T23:00:00+00:00"
+  ],
+  "rows": 43848,
+  "expected_rows": 43848,
+  "nan_counts": {
+    "temperature_2m": 0,
+    "relative_humidity_2m": 0,
+    "precipitation": 0,
+    "wind_speed_10m": 0,
+    "surface_pressure": 0
+  },
+  "content_sha256": "6031e9a461ae52100b8cb8629123a4a7412b47469891af9b852543787a754535",
+  "file": "weather.parquet"
+}
