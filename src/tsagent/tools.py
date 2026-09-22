@@ -44,13 +44,22 @@ STRICT_KEYWORDS = {
 }
 
 # Pydantic error types that the JSON schema sent to the provider also expresses.
-_SCHEMA_ERROR_TYPES = {"missing", "extra_forbidden", "model_type", "dict_type"}
+_SCHEMA_ERROR_TYPES = {
+    "missing",
+    "extra_forbidden",
+    "model_type",
+    "dict_type",
+    "list_type",
+    "literal_error",
+    "enum",
+}
 _SCHEMA_ERROR_PREFIXES = (
     "string_type",
     "float_type",
     "float_parsing",
     "int_type",
     "bool_type",
+    "bool_parsing",
     "none_required",
 )
 
@@ -118,19 +127,29 @@ class Tool:
 def to_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Reduce a Pydantic JSON schema to the subset required by provider strict mode:
     every object has additionalProperties false and lists all properties as required;
-    only STRICT_KEYWORDS remain. Our argument models are flat, so $defs/$ref are not
-    supported and rejected loudly rather than silently mishandled."""
-    if "$defs" in schema or "$ref" in json.dumps(schema):
-        raise ValueError("nested models ($defs/$ref) are not supported by to_strict_schema")
+    only STRICT_KEYWORDS remain. Nested models ($defs / $ref) are inlined, because the
+    reduced schema must be self-contained. Recursive models are rejected loudly."""
+    defs = schema.get("$defs", {})
 
-    def clean(node: Any) -> Any:
+    def resolve(ref: str, seen: tuple[str, ...]) -> Any:
+        prefix = "#/$defs/"
+        if not ref.startswith(prefix) or ref[len(prefix) :] not in defs:
+            raise ValueError(f"unsupported or unknown $ref: {ref}")
+        name = ref[len(prefix) :]
+        if name in seen:
+            raise ValueError(f"recursive model '{name}' is not supported by to_strict_schema")
+        return clean(defs[name], (*seen, name))
+
+    def clean(node: Any, seen: tuple[str, ...] = ()) -> Any:
         if isinstance(node, list):
-            return [clean(n) for n in node]
+            return [clean(n, seen) for n in node]
         if not isinstance(node, dict):
             return node
-        out = {k: clean(v) for k, v in node.items() if k in STRICT_KEYWORDS}
+        if "$ref" in node:
+            return resolve(node["$ref"], seen)
+        out = {k: clean(v, seen) for k, v in node.items() if k in STRICT_KEYWORDS}
         if "properties" in node:  # properties is a name->schema map, clean each schema
-            out["properties"] = {name: clean(sub) for name, sub in node["properties"].items()}
+            out["properties"] = {name: clean(sub, seen) for name, sub in node["properties"].items()}
         if node.get("type") == "object":
             out.setdefault("properties", {})
             out["required"] = list(out["properties"])
@@ -142,7 +161,7 @@ def to_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _classify_validation_error(e: ValidationError) -> ToolCallStatus:
+def classify_validation_error(e: ValidationError) -> ToolCallStatus:
     for err in e.errors():
         t = err["type"]
         if t in _SCHEMA_ERROR_TYPES or t.startswith(_SCHEMA_ERROR_PREFIXES):
@@ -150,7 +169,7 @@ def _classify_validation_error(e: ValidationError) -> ToolCallStatus:
     return ToolCallStatus.RULE_VIOLATION
 
 
-def _format_validation_error(e: ValidationError) -> str:
+def format_validation_error(e: ValidationError) -> str:
     parts = []
     for err in e.errors():
         where = ".".join(str(p) for p in err["loc"]) or "(arguments)"
@@ -211,8 +230,8 @@ class ToolRegistry:
         try:
             args = tool.args_model.model_validate(data)
         except ValidationError as e:
-            msg = _format_validation_error(e)
-            return finish(_classify_validation_error(e), f"Error: invalid arguments for {name}: {msg}", msg)
+            msg = format_validation_error(e)
+            return finish(classify_validation_error(e), f"Error: invalid arguments for {name}: {msg}", msg)
 
         try:
             result = tool.run(args)

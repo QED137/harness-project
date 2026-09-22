@@ -12,6 +12,7 @@ from tsagent.llm import (
     LLMCallRecord,
     LLMResponse,
     OpenAIClient,
+    StructuredResponse,
     load_dotenv,
     openai_config_problem,
 )
@@ -29,13 +30,28 @@ def call(name: str, arguments: str) -> tuple[str, str]:
 
 class ScriptedLLM:
     """Returns one scripted step per call: a (tool, arguments) tuple, a text string,
-    or an Exception to raise. Records what it was sent."""
+    or an Exception to raise. Records what it was sent.
+    `plans` scripts the planner calls the same way: a JSON string or an Exception."""
 
     model = "fake-model"
 
-    def __init__(self, steps):
+    def __init__(self, steps, plans=()):
         self.steps = list(steps)
+        self.plans = list(plans)
         self.requests: list[dict] = []
+        self.plan_requests: list[dict] = []
+
+    def create_structured(self, *, instructions, input, schema_name, schema):
+        self.plan_requests.append(
+            {"instructions": instructions, "input": input, "schema_name": schema_name, "schema": schema}
+        )
+        step = self.plans.pop(0)
+        if isinstance(step, Exception):
+            raise step
+        record = LLMCallRecord(
+            model=self.model, latency_s=0.01, purpose="planner", input_tokens=50, output_tokens=10
+        )
+        return StructuredResponse(step, record)
 
     def create(self, *, instructions, input, tools):
         self.requests.append({"instructions": instructions, "input": list(input), "tools": tools})

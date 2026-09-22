@@ -1,6 +1,7 @@
 """Step 3: the agent loop.
 
     python -m tsagent.agent "What was the mean temperature in 2023?"
+    python -m tsagent.agent "..." --planner           # plan first (step 4), then run the loop
     python -m tsagent.agent "..." --trace run.json     # also save the full run record
 
 Loop: send the question and the tool definitions to the model; execute the tool
@@ -20,7 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from .llm import LLMCallRecord, LLMClient, OpenAIClient, load_dotenv, openai_config_problem
-from .schemas import SubmitAnswerArgs
+from .planner import PlanResult, PlanStatus, format_plan, make_plan
+from .schemas import Plan, SubmitAnswerArgs
 from .tools import ToolCallRecord, ToolRegistry
 
 SYSTEM_PROMPT = """\
@@ -40,6 +42,8 @@ If the question cannot be answered from this dataset, say so in method_summary a
 the value "not answerable".
 """
 
+PLAN_INTRO = "A planning step produced this plan. Follow it, but correct it if the data shows it is wrong:"
+
 DEFAULT_MAX_TURNS = 15
 MAX_NUDGES = 1  # how often we remind a model that replied in text instead of calling a tool
 
@@ -55,6 +59,10 @@ class StopReason(StrEnum):
 class AgentRun:
     question: str
     model: str
+    use_planner: bool = False
+    plan_status: PlanStatus | None = None  # None when the planner is off
+    plan: Plan | None = None
+    plan_error: str | None = None
     stop_reason: StopReason | None = None
     answer: SubmitAnswerArgs | None = None
     turns: int = 0
@@ -93,17 +101,38 @@ class AgentRun:
         return data
 
 
+def _plan(question: str, llm: LLMClient, registry: ToolRegistry) -> PlanResult:
+    """Run the planner. The dataset description is produced by calling the tool function
+    directly (host side), so it is not counted as a tool call made by the model."""
+    try:
+        tool = registry.tools["describe_dataset"]
+        description = tool.run(tool.args_model()).output
+    except Exception as e:  # noqa: BLE001  our side failed: recorded, not raised
+        return PlanResult(PlanStatus.SETUP_ERROR, error=f"{type(e).__name__}: {e}")
+    return make_plan(question, llm, description)
+
+
 def run_agent(
     question: str,
     llm: LLMClient,
     registry: ToolRegistry,
     max_turns: int = DEFAULT_MAX_TURNS,
+    use_planner: bool = False,
 ) -> AgentRun:
-    run = AgentRun(question=question, model=llm.model)
+    run = AgentRun(question=question, model=llm.model, use_planner=use_planner)
     start = time.monotonic()
     first_record = len(registry.records)
     tools = registry.openai_tools()
-    history: list[Any] = [{"role": "user", "content": question}]
+
+    first_message = question
+    if use_planner:
+        result = _plan(question, llm, registry)
+        run.plan_status, run.plan, run.plan_error = result.status, result.plan, result.error
+        if result.record is not None:
+            run.llm_calls.append(result.record)
+        if result.plan is not None:  # an invalid plan is recorded; the agent continues without one
+            first_message = f"{question}\n\n{PLAN_INTRO}\n{format_plan(result.plan)}"
+    history: list[Any] = [{"role": "user", "content": first_message}]
 
     try:
         while run.turns < max_turns:
@@ -148,6 +177,12 @@ def run_agent(
 # ------------------------------------------------------------------ CLI
 def format_run(run: AgentRun) -> str:
     lines = [f"question: {run.question}"]
+    if run.use_planner:
+        if run.plan is not None:
+            lines.append(f"plan:     ok, {len(run.plan.steps)} steps; {run.plan.interpretation}")
+        else:
+            status = run.plan_status.value if run.plan_status else "unknown"
+            lines.append(f"plan:     {status} (continued without a plan): {run.plan_error}")
     for i, rec in enumerate(run.tool_calls, 1):
         lines.append(f"  {i:>2}. {rec.tool:<17} {rec.status.value}")
     if run.answer is not None:
@@ -172,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("question")
     p.add_argument("--data-dir", type=Path, default=Path("data"))
     p.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS)
+    p.add_argument("--planner", action="store_true", help="run the planner before the agent loop (step 4)")
     p.add_argument("--trace", type=Path, help="write the full run record as JSON to this file")
     args = p.parse_args(argv)
 
@@ -187,7 +223,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     llm = OpenAIClient(model=os.environ["OPENAI_MODEL"])
-    run = run_agent(args.question, llm, ToolRegistry.default(args.data_dir, sandbox), args.max_turns)
+    registry = ToolRegistry.default(args.data_dir, sandbox)
+    run = run_agent(args.question, llm, registry, args.max_turns, use_planner=args.planner)
     print(format_run(run))
     if args.trace:
         args.trace.write_text(json.dumps(run.to_dict(), indent=2, ensure_ascii=False) + "\n")

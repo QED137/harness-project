@@ -24,6 +24,7 @@ class FunctionCall:
 class LLMCallRecord:
     model: str
     latency_s: float
+    purpose: str = "agent"  # "agent" for loop turns, "planner" for the planning call
     input_tokens: int = 0
     output_tokens: int = 0
     reasoning_tokens: int = 0
@@ -39,10 +40,20 @@ class LLMResponse:
     record: LLMCallRecord
 
 
+@dataclass
+class StructuredResponse:
+    text: str  # the raw JSON text the model produced, validated by the caller
+    record: LLMCallRecord
+
+
 class LLMClient(Protocol):
     model: str
 
     def create(self, *, instructions: str, input: list[Any], tools: list[dict[str, Any]]) -> LLMResponse: ...
+
+    def create_structured(
+        self, *, instructions: str, input: list[Any], schema_name: str, schema: dict[str, Any]
+    ) -> StructuredResponse: ...
 
 
 def _get(obj: Any, name: str, default: Any = None) -> Any:
@@ -80,17 +91,37 @@ class OpenAIClient:
             for item in output
             if _get(item, "type") == "function_call"
         ]
-        usage = _get(response, "usage")
-        record = LLMCallRecord(
-            model=self.model,
-            latency_s=latency,
-            input_tokens=_get(usage, "input_tokens", 0) or 0,
-            output_tokens=_get(usage, "output_tokens", 0) or 0,
-            reasoning_tokens=_get(_get(usage, "output_tokens_details"), "reasoning_tokens", 0) or 0,
-            cached_tokens=_get(_get(usage, "input_tokens_details"), "cached_tokens", 0) or 0,
-            response_id=_get(response, "id"),
-        )
+        record = _record(self.model, response, latency)
         return LLMResponse(output, calls, _get(response, "output_text", "") or "", record)
+
+    def create_structured(
+        self, *, instructions: str, input: list[Any], schema_name: str, schema: dict[str, Any]
+    ) -> StructuredResponse:
+        """One call whose reply must be JSON matching `schema` (provider strict mode)."""
+        start = time.monotonic()
+        response = self.client.responses.create(
+            model=self.model,
+            instructions=instructions,
+            input=input,
+            text={"format": {"type": "json_schema", "name": schema_name, "schema": schema, "strict": True}},
+        )
+        latency = time.monotonic() - start
+        record = _record(self.model, response, latency, purpose="planner")
+        return StructuredResponse(_get(response, "output_text", "") or "", record)
+
+
+def _record(model: str, response: Any, latency: float, purpose: str = "agent") -> LLMCallRecord:
+    usage = _get(response, "usage")
+    return LLMCallRecord(
+        model=model,
+        latency_s=latency,
+        purpose=purpose,
+        input_tokens=_get(usage, "input_tokens", 0) or 0,
+        output_tokens=_get(usage, "output_tokens", 0) or 0,
+        reasoning_tokens=_get(_get(usage, "output_tokens_details"), "reasoning_tokens", 0) or 0,
+        cached_tokens=_get(_get(usage, "input_tokens_details"), "cached_tokens", 0) or 0,
+        response_id=_get(response, "id"),
+    )
 
 
 # ------------------------------------------------------------------ configuration

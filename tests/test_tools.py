@@ -75,9 +75,33 @@ def test_only_supported_keywords_are_sent(registry):
                 assert set(node) <= STRICT_KEYWORDS, (path, set(node) - STRICT_KEYWORDS)
 
 
-def test_nested_models_are_rejected_not_mishandled():
-    with pytest.raises(ValueError, match="nested"):
-        to_strict_schema({"type": "object", "$defs": {"X": {}}, "properties": {}})
+def test_nested_models_are_inlined():
+    schema = {
+        "type": "object",
+        "$defs": {"Step": {"type": "object", "title": "Step", "properties": {"x": {"type": "string"}}}},
+        "properties": {"steps": {"type": "array", "items": {"$ref": "#/$defs/Step"}, "maxItems": 3}},
+    }
+    out = to_strict_schema(schema)
+    assert "$defs" not in json.dumps(out) and "$ref" not in json.dumps(out)
+    item = out["properties"]["steps"]["items"]
+    assert item == {
+        "type": "object",
+        "properties": {"x": {"type": "string"}},
+        "required": ["x"],
+        "additionalProperties": False,
+    }
+    assert "maxItems" not in out["properties"]["steps"]  # rule-level: enforced by Pydantic only
+
+
+def test_recursive_and_unknown_refs_are_rejected_loudly():
+    recursive = {
+        "$defs": {"N": {"type": "object", "properties": {"child": {"$ref": "#/$defs/N"}}}},
+        "$ref": "#/$defs/N",
+    }
+    with pytest.raises(ValueError, match="recursive"):
+        to_strict_schema(recursive)
+    with pytest.raises(ValueError, match="unknown"):
+        to_strict_schema({"type": "object", "properties": {"a": {"$ref": "#/$defs/Missing"}}})
 
 
 def test_run_python_description_matches_real_sandbox_limits(registry):

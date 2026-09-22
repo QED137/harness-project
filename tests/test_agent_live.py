@@ -15,6 +15,7 @@ import pytest
 
 from tsagent.agent import StopReason, run_agent
 from tsagent.llm import OpenAIClient, load_dotenv, openai_config_problem
+from tsagent.planner import PlanStatus
 from tsagent.sandbox import DockerSandbox, SandboxConfig
 from tsagent.tools import ToolRegistry
 
@@ -30,14 +31,18 @@ pytestmark = [
 ]
 
 
-def test_first_real_question_matches_pandas():
+@pytest.mark.parametrize("use_planner", [False, True], ids=["no-planner", "planner"])
+def test_first_real_question_matches_pandas(use_planner):
     sandbox = DockerSandbox(SandboxConfig(data_dir=DATA, preload="/data/weather.parquet"))
     llm = OpenAIClient(model=os.environ["OPENAI_MODEL"])
     run = run_agent(
         "What was the mean 2 m air temperature over the whole year 2023, in °C?",
         llm,
         ToolRegistry.default(DATA, sandbox),
+        use_planner=use_planner,
     )
     assert run.stop_reason is StopReason.ANSWERED, (run.stop_reason, run.error, run.final_text)
+    if use_planner:
+        assert run.plan_status is PlanStatus.OK, (run.plan_status, run.plan_error)
     expected = pd.read_parquet(DATA / "weather.parquet").loc["2023", "temperature_2m"].mean()
     assert float(run.answer.value) == pytest.approx(expected, abs=0.05)
