@@ -1,0 +1,34 @@
+# Local LLM for development: free, runs on your own machine.
+#
+#   docker compose up -d ollama                         start (models are kept in a volume)
+#   docker compose exec ollama ollama pull qwen3:4b     download a model once
+#   docker compose logs -f ollama                       watch what it is doing
+#   docker compose down                                 stop
+#
+# Then in .env:  OPENAI_BASE_URL=http://localhost:11434/v1  OPENAI_API_KEY=ollama  OPENAI_MODEL=qwen3:4b
+#
+# Only Ollama runs here. The agent runs on the host, because it starts sandbox containers
+# itself; running it inside Docker would need the Docker socket, i.e. root on the host.
+services:
+  ollama:
+    # Needs Ollama >= 0.13.3 for the Responses API. For reproducible evaluation runs,
+    # replace "latest" with the exact version you tested, e.g. ollama/ollama:<version>.
+    image: ollama/ollama:latest
+    ports:
+      # 127.0.0.1 only: Ollama has no authentication, so never expose it to your network.
+      - "127.0.0.1:11434:11434"
+    environment:
+      # Default context is small; if prompt + tools + history do not fit, Ollama silently
+      # drops the beginning. Lower to 8192 if memory is tight with larger models.
+      OLLAMA_CONTEXT_LENGTH: "16384"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ollama-models:

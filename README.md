@@ -207,6 +207,26 @@ pip install -e ".[dev]"
 docker build -t tsagent-sandbox:latest docker/sandbox
 ```
 
+### Choosing a model
+
+The agent uses the OpenAI Responses API. Configure it in `.env` (copy `.env.example`; `.env` is never committed):
+
+- **OpenAI** (paid per token): set `OPENAI_API_KEY` and `OPENAI_MODEL`. Set a monthly spending limit in the OpenAI dashboard first.
+- **Local model via Ollama** (free, slower): start it in Docker, download a model once, and point the agent at it.
+
+```bash
+docker compose up -d ollama
+docker compose exec ollama ollama pull qwen3:4b
+```
+
+```
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_API_KEY=ollama
+OPENAI_MODEL=qwen3:4b
+```
+
+Only Ollama runs in Docker; the agent runs on the host because it starts the sandbox containers itself. Ollama listens on `127.0.0.1` only, since it has no authentication.
+
 ---
 
 ## Testing
