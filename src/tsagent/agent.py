@@ -2,6 +2,7 @@
 
     python -m tsagent.agent "What was the mean temperature in 2023?"
     python -m tsagent.agent "..." --planner           # plan first (step 4), then run the loop
+    python -m tsagent.agent "..." --verifier          # check answers before accepting them (step 5)
     python -m tsagent.agent "..." --trace run.json     # also save the full run record
 
 Loop: send the question and the tool definitions to the model; execute the tool
@@ -24,6 +25,7 @@ from .llm import LLMCallRecord, LLMClient, OpenAIClient, load_dotenv, openai_con
 from .planner import PlanResult, PlanStatus, format_plan, make_plan
 from .schemas import Plan, SubmitAnswerArgs
 from .tools import ToolCallRecord, ToolRegistry
+from .verifier import CheckStatus, Verdict, collect_evidence, verify
 
 SYSTEM_PROMPT = """\
 You answer quantitative questions about an hourly weather dataset by writing and running Python.
@@ -46,6 +48,7 @@ PLAN_INTRO = "A planning step produced this plan. Follow it, but correct it if t
 
 DEFAULT_MAX_TURNS = 15
 MAX_NUDGES = 1  # how often we remind a model that replied in text instead of calling a tool
+MAX_REJECTIONS = 2  # verifier rejections the model may correct; the next one ends the run
 
 
 class StopReason(StrEnum):
@@ -53,6 +56,14 @@ class StopReason(StrEnum):
     MAX_TURNS = "max_turns"  # turn budget used up
     NO_SUBMIT = "no_submit"  # model kept replying in text, never submitted
     LLM_ERROR = "llm_error"  # the API call itself failed
+    REJECTED = "rejected"  # the verifier rejected more than MAX_REJECTIONS answers
+
+
+@dataclass
+class VerificationRecord:
+    answer: SubmitAnswerArgs
+    verdict: Verdict
+    ok: bool
 
 
 @dataclass
@@ -63,6 +74,9 @@ class AgentRun:
     plan_status: PlanStatus | None = None  # None when the planner is off
     plan: Plan | None = None
     plan_error: str | None = None
+    use_verifier: bool = False
+    verifications: list[VerificationRecord] = field(default_factory=list)
+    rejected_answer: SubmitAnswerArgs | None = None  # last answer, when the run ended as REJECTED
     stop_reason: StopReason | None = None
     answer: SubmitAnswerArgs | None = None
     turns: int = 0
@@ -118,8 +132,10 @@ def run_agent(
     registry: ToolRegistry,
     max_turns: int = DEFAULT_MAX_TURNS,
     use_planner: bool = False,
+    use_verifier: bool = False,
+    max_rejections: int = MAX_REJECTIONS,
 ) -> AgentRun:
-    run = AgentRun(question=question, model=llm.model, use_planner=use_planner)
+    run = AgentRun(question=question, model=llm.model, use_planner=use_planner, use_verifier=use_verifier)
     start = time.monotonic()
     first_record = len(registry.records)
     tools = registry.openai_tools()
@@ -158,13 +174,19 @@ def run_agent(
 
             for call in response.function_calls:
                 outcome = registry.call(call.name, call.arguments)
-                history.append(
-                    {"type": "function_call_output", "call_id": call.call_id, "output": outcome.output}
-                )
-                if outcome.terminal:
+                output, accepted = outcome.output, outcome.terminal
+                if outcome.terminal and use_verifier and outcome.answer is not None:
+                    verdict = _verify(outcome.answer, call.arguments, registry, first_record, run.plan)
+                    run.verifications.append(VerificationRecord(outcome.answer, verdict, verdict.ok))
+                    if not verdict.ok:
+                        output, accepted = verdict.message_for_model(), False
+                        if sum(not v.ok for v in run.verifications) > max_rejections:
+                            run.stop_reason, run.rejected_answer = StopReason.REJECTED, outcome.answer
+                history.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
+                if accepted:
                     run.stop_reason, run.answer = StopReason.ANSWERED, outcome.answer
 
-            if run.stop_reason is StopReason.ANSWERED:
+            if run.stop_reason in (StopReason.ANSWERED, StopReason.REJECTED):
                 break
         else:
             run.stop_reason = StopReason.MAX_TURNS
@@ -172,6 +194,15 @@ def run_agent(
         run.tool_calls = registry.records[first_record:]
         run.total_s = time.monotonic() - start
     return run
+
+
+def _verify(
+    answer: SubmitAnswerArgs, raw_arguments: str, registry: ToolRegistry, first_record: int, plan: Plan | None
+) -> Verdict:
+    """Verify against what run_python actually produced in THIS run only."""
+    results = [r.sandbox for r in registry.records[first_record:] if r.tool == "run_python"]
+    expected_unit = plan.expected_unit if plan is not None else None
+    return verify(answer, collect_evidence(results), raw_arguments, expected_unit)
 
 
 # ------------------------------------------------------------------ CLI
@@ -185,6 +216,19 @@ def format_run(run: AgentRun) -> str:
             lines.append(f"plan:     {status} (continued without a plan): {run.plan_error}")
     for i, rec in enumerate(run.tool_calls, 1):
         lines.append(f"  {i:>2}. {rec.tool:<17} {rec.status.value}")
+    if run.use_verifier:
+        rejected = sum(not v.ok for v in run.verifications)
+        warnings = [c for v in run.verifications for c in v.verdict.checks if c.status is CheckStatus.WARN]
+        if not run.verifications:
+            lines.append("verifier: no answer submitted")
+        else:
+            accepted = "rejected, run stopped" if run.stop_reason is StopReason.REJECTED else "accepted"
+            lines.append(f"verifier: {accepted} after {rejected} rejection(s)")
+        for v in run.verifications:
+            for c in v.verdict.failures():
+                lines.append(f"          rejected {v.answer.value}: {c.name}: {c.detail}")
+        for c in warnings:
+            lines.append(f"          warning: {c.name}: {c.detail}")
     if run.answer is not None:
         unit = f" {run.answer.unit}" if run.answer.unit else ""
         lines.append(f"answer:   {run.answer.value}{unit}")
@@ -208,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--data-dir", type=Path, default=Path("data"))
     p.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS)
     p.add_argument("--planner", action="store_true", help="run the planner before the agent loop (step 4)")
+    p.add_argument("--verifier", action="store_true", help="verify answers before accepting them (step 5)")
     p.add_argument("--trace", type=Path, help="write the full run record as JSON to this file")
     args = p.parse_args(argv)
 
@@ -224,7 +269,9 @@ def main(argv: list[str] | None = None) -> int:
 
     llm = OpenAIClient(model=os.environ["OPENAI_MODEL"])
     registry = ToolRegistry.default(args.data_dir, sandbox)
-    run = run_agent(args.question, llm, registry, args.max_turns, use_planner=args.planner)
+    run = run_agent(
+        args.question, llm, registry, args.max_turns, use_planner=args.planner, use_verifier=args.verifier
+    )
     print(format_run(run))
     if args.trace:
         args.trace.write_text(json.dumps(run.to_dict(), indent=2, ensure_ascii=False) + "\n")

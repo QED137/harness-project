@@ -1,0 +1,27 @@
+{
+  "loop": {
+    "runs": 10,
+    "questions": 5,
+    "runs_per_question_min": 2,
+    "pass@1": 1.0,
+    "consistency": 1.0,
+    "answer_spread_median": 0.0,
+    "tool_calls": 32,
+    "tool_schema_violation_rate": 0.0,
+    "tool_rule_violation_rate": 0.0,
+    "tool_invalid_json_rate": 0.0,
+    "stop_reasons": {
+      "answered": 10
+    },
+    "plan_status": {},
+    "sandbox_violations": {},
+    "sandbox_limits": {},
+    "verifier_correct_catches": 0,
+    "verifier_false_rejections": 0,
+    "median_latency_s": 10.893966254003317,
+    "median_input_tokens": 3247.5,
+    "median_output_tokens": 922.0,
+    "total_input_tokens": 36672,
+    "total_output_tokens": 8816
+  }
+}

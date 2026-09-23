@@ -31,8 +31,12 @@ pytestmark = [
 ]
 
 
-@pytest.mark.parametrize("use_planner", [False, True], ids=["no-planner", "planner"])
-def test_first_real_question_matches_pandas(use_planner):
+@pytest.mark.parametrize(
+    "use_planner, use_verifier",
+    [(False, False), (True, False), (True, True)],
+    ids=["loop-only", "planner", "planner+verifier"],
+)
+def test_first_real_question_matches_pandas(use_planner, use_verifier):
     sandbox = DockerSandbox(SandboxConfig(data_dir=DATA, preload="/data/weather.parquet"))
     llm = OpenAIClient(model=os.environ["OPENAI_MODEL"])
     run = run_agent(
@@ -40,9 +44,12 @@ def test_first_real_question_matches_pandas(use_planner):
         llm,
         ToolRegistry.default(DATA, sandbox),
         use_planner=use_planner,
+        use_verifier=use_verifier,
     )
     assert run.stop_reason is StopReason.ANSWERED, (run.stop_reason, run.error, run.final_text)
     if use_planner:
         assert run.plan_status is PlanStatus.OK, (run.plan_status, run.plan_error)
+    if use_verifier:
+        assert run.verifications and run.verifications[-1].ok
     expected = pd.read_parquet(DATA / "weather.parquet").loc["2023", "temperature_2m"].mean()
     assert float(run.answer.value) == pytest.approx(expected, abs=0.05)
